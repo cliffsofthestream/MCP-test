@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>昆明4日游 · H5行程地图与高德唤起</title>
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root {
+      --bg: #0f1115; /* 深色背景，突出卡片与地图 */
+      --card: #151822;
+      --text: #e8ecf1;
+      --muted: #9aa3ad;
+      --accent: #5ac8fa;
+      --accent-2: #7dd47d;
+      --danger: #ff6b6b;
+      --warning: #f7b955;
+      --shadow: 0 6px 24px rgba(0,0,0,.35);
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.6 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; }
+    header { padding: 20px 18px 8px; }
+    h1 { margin: 0; font-size: 20px; letter-spacing: .5px; }
+    .sub { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+    .weather { margin: 12px 18px; padding: 12px 14px; background: linear-gradient(180deg,#1c2230,#171c27); border-radius: var(--radius); box-shadow: var(--shadow); display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
+    .weather .tip { font-size: 13px; color: var(--muted); }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 999px; background: rgba(90,200,250,.15); color: var(--accent); font-size: 12px; margin-right: 6px; }
+    .badge.warn { background: rgba(247,185,85,.15); color: var(--warning); }
+
+    .tabs { display: flex; gap: 8px; padding: 0 18px 12px; overflow-x: auto; }
+    .tab { border: 1px solid #2b3141; padding: 8px 12px; border-radius: 999px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+    .tab.active { background: #1a2030; color: var(--text); border-color: #3b4155; }
+
+    .layout { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; padding: 0 18px 18px; }
+    @media (max-width: 1024px) { .layout { grid-template-columns: 1fr; } }
+
+    #map { width: 100%; height: 56vh; min-height: 360px; background: #0b0e14; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+
+    .card { background: var(--card); border: 1px solid #242b3a; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+    .card .hd { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-bottom: 1px solid #242b3a; }
+    .card .hd .ttl { font-weight: 600; }
+    .card .bd { padding: 12px; }
+
+    .poi-list { display: grid; grid-template-columns: 1fr; gap: 10px; }
+    .poi { display: grid; grid-template-columns: 100px 1fr; gap: 10px; padding: 8px; border-radius: 12px; background: #111520; border: 1px solid #232a3a; }
+    .poi img { width: 100%; height: 72px; object-fit: cover; border-radius: 8px; background: #0c0f16; }
+    .poi .name { font-weight: 600; }
+    .poi .meta { color: var(--muted); font-size: 12px; }
+    .poi .actions { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 10px; border: 1px solid #2a3242; color: var(--text); text-decoration: none; font-size: 12px; background: #171d2a; }
+    .btn.primary { background: #1f2739; border-color: #3b4661; }
+    .btn.green { background: rgba(125,212,125,.12); border-color: rgba(125,212,125,.35); color: var(--accent-2); }
+    .btn:hover { filter: brightness(1.05); }
+
+    .timeplan { display: grid; grid-template-columns: 1fr; gap: 6px; color: var(--muted); font-size: 12px; }
+    .legend { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; }
+    .lg-dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; }
+    .lg-d1 { background: #5ac8fa; }
+    .lg-d2 { background: #7dd47d; }
+    .lg-d3 { background: #f7b955; }
+    .lg-d4 { background: #ff6b6b; }
+
+    footer { padding: 10px 18px 22px; color: var(--muted); font-size: 12px; }
+    code.small { background: #0e121b; border: 1px solid #2a3142; padding: 1px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>昆明 4 日游 · 地图与路线</h1>
+    <div class="sub">已为你规划 D1-D4 路线（含高德打车唤起与个人地图），可直接点击打开高德 App 导航</div>
+  </header>
+
+  <section class="weather" id="weatherBox">
+    <div>
+      <span class="badge warn">近期昆明多雨</span>
+      <div class="tip">建议随身雨具，优先选择室内行程在大雨日（已将省博/官渡/斗南安排至雨天更友好的一天）。</div>
+    </div>
+    <div id="weatherInline" class="tip"></div>
+  </section>
+
+  <div class="tabs" id="dayTabs"></div>
+
+  <div class="layout">
+    <div id="map" aria-label="行程地图"></div>
+    <div class="card">
+      <div class="hd">
+        <div class="ttl" id="panelTitle">行程详情</div>
+        <div class="legend">
+          <span class="lg-dot lg-d1"></span> D1
+          <span class="lg-dot lg-d2"></span> D2
+          <span class="lg-dot lg-d3"></span> D3
+          <span class="lg-dot lg-d4"></span> D4
+        </div>
+      </div>
+      <div class="bd">
+        <div class="timeplan" id="timePlan"></div>
+        <div class="poi-list" id="poiList"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    行程可在手机端直接打开高德 App。若在桌面端，建议用手机扫码或复制 <code class="small">amapuri://</code> 链接在手机打开。
+  </footer>
+
+  <script>
+    // —— 数据区：POI、路线、图片、唤端链接、建议时段 ——
+    const DAYS = [
+      {
+        id: 'D1', name: 'D1 市区慢游', color: '#5ac8fa',
+        amapUri: 'amapuri://workInAmap/createWithToken?polymericId=mcp_8cb9c04f1a3243d8a7afb2be15165156&from=MCP',
+        plan: [
+          { time: '09:00-10:30', text: '翠湖公园 · 绕湖散步拍照' },
+          { time: '10:40-11:40', text: '云南大学南院 · 打卡东陆校区' },
+          { time: '14:30-17:00', text: '南屏步行街 · 逛街美食' },
+          { time: '19:00-20:30', text: '金马坊 · 夜景闲逛' }
+        ],
+        points: [
+          { name: '翠湖公园', lon: 102.703689, lat: 25.048474, poiId: 'B0367065BF', photo: 'http://store.is.autonavi.com/showpic/ffcd96427735fd6522c3149398cf7ab5', addr: '翠湖南路67号' },
+          { name: '云南大学南院', lon: 102.702135, lat: 25.054016, poiId: 'B036707U9S', photo: 'http://store.is.autonavi.com/showpic/b3337adb94dbf8c03c4999d7bbbe0911', addr: '翠湖北路2号' },
+          { name: '南屏步行街', lon: 102.711831, lat: 25.037294, poiId: 'B0FFFY8V69', photo: 'http://store.is.autonavi.com/showpic/55561e181cf26a31381206c7146a9b7a', addr: '南屏街75号' },
+          { name: '金马坊', lon: 102.711120, lat: 25.031534, poiId: 'B0HGTS8YPK', photo: 'https://aos-comment.amap.com/B0HGTS8YPK/comment/content_media_external_images_media_100001699_1738470720231_28400132.jpg', addr: '金碧路' }
+        ],
+        taxiUris: [
+          'amapuri://drive/takeTaxi?sourceApplication=amapplatform&slat=25.048474&slon=102.703689&sname=%E7%BF%A0%E6%B9%96%E5%85%AC%E5%9B%AD&dlon=102.702135&dlat=25.054016&dname=%E4%BA%91%E5%8D%97%E5%A4%A7%E5%AD%A6%E5%8D%97%E9%99%A2',
+          'amapuri://drive/takeTaxi?sourceApplication=amapplatform&slat=25.054016&slon=102.702135&sname=%E4%BA%91%E5%8D%97%E5%A4%A7%E5%AD%A6%E5%8D%97%E9%99%A2&dlon=102.711831&dlat=25.037294&dname=%E5%8D%97%E5%B1%8F%E6%AD%A5%E8%A1%8C%E8%A1%97',
+          'amapuri://drive/takeTaxi?sourceApplication=amapplatform&slat=25.037294&slon=102.711831&sname=%E5%8D%97%E5%B1%8F%E6%AD%A5%E8%A1%8C%E8%A1%97&dlon=102.711120&dlat=25.031534&dname=%E9%87%91%E9%A9%AC%E5%9D%8A'
+        ]
+      },
+      {
+        id: 'D2', name: 'D2 西山 · 滇池 · 民族村', color: '#7dd47d',
+        amapUri: 'amapuri://workInAmap/createWithToken?polymericId=mcp_bdbe74b305254eb29c870927e1aefa26&from=MCP',
+        plan: [
+          { time: '09:00-12:00', text: '西山风景区 · 索道/栈道' },
+          { time: '14:00-16:30', text: '滇池海埂公园 · 湖畔漫步' },
+          { time: '18:00-21:00', text: '云南民族村 · 夜场演出' }
+        ],
+        points: [
+          { name: '西山风景区', lon: 102.628595, lat: 24.964622, poiId: 'B0367065GU', photo: 'http://store.is.autonavi.com/showpic/ffe50e18ecc3314225c876b0717ef923', addr: '西山公路' },
+          { name: '滇池海埂公园', lon: 102.658412, lat: 24.958925, poiId: 'B036702E39', photo: 'http://aos-cdn-image.amap.com/sns/ugccomment/d1c193da-0798-4a4a-993c-15ac85397613.jpeg', addr: '滇池路1318号' },
+          { name: '云南民族村', lon: 102.660893, lat: 24.966060, poiId: 'B036706Y83', photo: 'http://store.is.autonavi.com/showpic/7e25b703a2a0a3ffb5b2b6dd9485d14c', addr: '滇池路1310号' }
+        ],
+        taxiUris: [
+          'amapuri://drive/takeTaxi?sourceApplication=amapplatform&slat=24.964622&slon=102.628595&sname=%E8%A5%BF%E5%B1%B1%E9%A3%8E%E6%99%AF%E5%8C%BA&dlon=102.658412&dlat=24.958925&dname=%E6%BB%87%E6%B1%A0%E6%B5%B7%E5%9F%82%E5%85%AC%E5%9B%AD',
+          'amapuri://drive/takeTaxi?sourceApplication=amapplatform&slat=24.958925&slon=102.658412&sname=%E6%BB%87%E6%B1%A0%E6%B5%B7%E5%9F%82%E5%85%AC%E5%9B%AD&dlon=102.660893&dlat=24.966060&dname=%E4%BA%91%E5%8D%97%E6%B0%91%E6%97%8F%E6%9D%91'
+        ]
+      },
+      {
+        id: 'D3', name: 'D3 石林一日游', color: '#f7b955',
+        amapUri: 'amapuri://workInAmap/createWithToken?polymericId=mcp_c3032b2a2f7c4d1ab71ff8047859b9aa&from=MCP',
+        plan: [
+          { time: '09:30-16:30', text: '石林风景区 · 大/小石林、望峰亭' }
+        ],
+        points: [
+          { name: '石林风景区', lon: 103.325701, lat: 24.812964, poiId: 'B036705Y72', photo: 'http://store.is.autonavi.com/showpic/5a69524e1f7a9e753cfc4374468c9b63', addr: '石林街道' }
+        ],
+        taxiUris: [
+          'amapuri://drive/takeTaxi?sourceApplication=amapplatform&dlon=103.325701&dlat=24.812964&dname=%E7%9F%B3%E6%9E%97%E9%A3%8E%E6%99%AF%E5%8C%BA'
+        ]
+      },
+      {
+        id: 'D4', name: 'D4 文博 · 官渡 · 斗南', color: '#ff6b6b',
+        amapUri: 'amapuri://workInAmap/createWithToken?polymericId=mcp_22f677c450f847c88aa956b89a3c7e45&from=MCP',
+        plan: [
+          { time: '09:30-11:30', text: '云南省博物馆 · 常设与专题展' },
+          { time: '14:00-16:30', text: '官渡古镇 · 古街老巷' },
+          { time: '18:30-21:30', text: '斗南花卉市场 · 夜市买花' }
+        ],
+        points: [
+          { name: '云南省博物馆', lon: 102.753517, lat: 24.949455, poiId: 'B03670312C', photo: 'http://store.is.autonavi.com/showpic/f3ab0d1d1db211982bcbc47cbe987ef2', addr: '广福路6393号' },
+          { name: '官渡古镇', lon: 102.755581, lat: 24.955125, poiId: 'B0367065CM', photo: 'http://store.is.autonavi.com/showpic/9badea547d784f320b6944744a55988a', addr: '广福路' },
+          { name: '斗南花卉市场', lon: 102.788064, lat: 24.902676, poiId: 'B0FFGF6XB3', photo: 'http://store.is.autonavi.com/showpic/34db8aeeca519767f2fbd99aea7dad5a', addr: '金桂街76号' }
+        ],
+        taxiUris: [
+          'amapuri://drive/takeTaxi?sourceApplication=amapplatform&slat=24.949455&slon=102.753517&sname=%E4%BA%91%E5%8D%97%E7%9C%81%E5%8D%9A%E7%89%A9%E9%A6%86&dlon=102.755581&dlat=24.955125&dname=%E5%AE%98%E6%B8%A1%E5%8F%A4%E9%95%87',
+          'amapuri://drive/takeTaxi?sourceApplication=amapplatform&slat=24.955125&slon=102.755581&sname=%E5%AE%98%E6%B8%A1%E5%8F%A4%E9%95%87&dlon=102.788064&dlat=24.902676&dname=%E6%96%97%E5%8D%97%E8%8A%B1%E5%8D%89%E5%B8%82%E5%9C%BA'
+        ]
+      }
+    ];
+
+    // —— 天气简要（来自工具查询：8/19-8/22 多雨） ——
+    const weatherForecast = [
+      { date: '08-19', day: '周二', dayweather: '小雨', temp: '24/18℃' },
+      { date: '08-20', day: '周三', dayweather: '中雨', temp: '23/17℃' },
+      { date: '08-21', day: '周四', dayweather: '中到大雨', temp: '21/17℃' },
+      { date: '08-22', day: '周五', dayweather: '大雨', temp: '21/17℃' }
+    ];
+
+    // GCJ-02 to WGS84（避免国内底图偏移）
+    // 参考常用实现（仅在中国境内时转换）
+    function outOfChina(lon, lat){
+      return (lon < 72.004 || lon > 137.8347) || (lat < 0.8293 || lat > 55.8271);
+    }
+    function transformLat(x, y){
+      let ret = -100.0 + 2.0*x + 3.0*y + 0.2*y*y + 0.1*x*y + 0.2*Math.sqrt(Math.abs(x));
+      ret += (20.0*Math.sin(6.0*x*Math.PI) + 20.0*Math.sin(2.0*x*Math.PI))*2.0/3.0;
+      ret += (20.0*Math.sin(y*Math.PI) + 40.0*Math.sin(y/3.0*Math.PI))*2.0/3.0;
+      ret += (160.0*Math.sin(y/12.0*Math.PI) + 320*Math.sin(y*Math.PI/30.0))*2.0/3.0;
+      return ret;
+    }
+    function transformLon(x, y){
+      let ret = 300.0 + x + 2.0*y + 0.1*x*x + 0.1*x*y + 0.1*Math.sqrt(Math.abs(x));
+      ret += (20.0*Math.sin(6.0*x*Math.PI) + 20.0*Math.sin(2.0*x*Math.PI))*2.0/3.0;
+      ret += (20.0*Math.sin(x*Math.PI) + 40.0*Math.sin(x/3.0*Math.PI))*2.0/3.0;
+      ret += (150.0*Math.sin(x/12.0*Math.PI) + 300.0*Math.sin(x/30.0*Math.PI))*2.0/3.0;
+      return ret;
+    }
+    function gcj02ToWgs84(lon, lat){
+      if (outOfChina(lon, lat)) return { lon, lat };
+      const a = 6378245.0, ee = 0.00669342162296594323;
+      let dLat = transformLat(lon - 105.0, lat - 35.0);
+      let dLon = transformLon(lon - 105.0, lat - 35.0);
+      const radLat = lat / 180.0 * Math.PI;
+      let magic = Math.sin(radLat);
+      magic = 1 - ee * magic * magic;
+      const sqrtMagic = Math.sqrt(magic);
+      dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * sqrtMagic) * Math.PI);
+      dLon = (dLon * 180.0) / (a / sqrtMagic * Math.cos(radLat) * Math.PI);
+      const mgLat = lat + dLat;
+      const mgLon = lon + dLon;
+      return { lon: lon - (mgLon - lon), lat: lat - (mgLat - lat) };
+    }
+
+    // —— 地图初始化（Leaflet + OSM） ——
+    const map = L.map('map', { zoomControl: true, scrollWheelZoom: true });
+    const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    let currentLayerGroup = null;
+
+    function renderDay(day){
+      // tabs active
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.id===day.id));
+      document.getElementById('panelTitle').textContent = day.name;
+
+      // 右侧：时间建议
+      const timePlan = document.getElementById('timePlan');
+      timePlan.innerHTML = day.plan.map(p => `<div>• ${p.time} — ${p.text}</div>`).join('');
+
+      // 右侧：POI列表 + 操作
+      const poiList = document.getElementById('poiList');
+      poiList.innerHTML = '';
+      // 高德个人地图按钮（整日）
+      const allBtn = document.createElement('div');
+      allBtn.className = 'actions';
+      allBtn.style.margin = '0 0 10px 0';
+      allBtn.innerHTML = `<a class="btn primary" href="${day.amapUri}">在高德App打开本日路线</a>`;
+      poiList.appendChild(allBtn);
+
+      day.points.forEach((p, idx) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'poi';
+        wrap.innerHTML = `
+          <img alt="${p.name}" src="${p.photo || ''}">
+          <div>
+            <div class="name">${idx+1}. ${p.name}</div>
+            <div class="meta">${p.addr || ''}</div>
+            <div class="actions">
+              ${idx < day.points.length-1 && day.taxiUris[idx] ? `<a class="btn green" href="${day.taxiUris[idx]}">打车前往下一站</a>` : ''}
+              <a class="btn" target="_blank" href="https://www.google.com/search?q=${encodeURIComponent(p.name)}">搜索了解</a>
+            </div>
+          </div>`;
+        poiList.appendChild(wrap);
+      });
+
+      // 地图：清理与绘制
+      if (currentLayerGroup) { currentLayerGroup.remove(); }
+      const layers = [];
+      const latlngs = [];
+      day.points.forEach((p) => {
+        const w = gcj02ToWgs84(p.lon, p.lat); // 转换
+        const ll = [w.lat, w.lon];
+        latlngs.push(ll);
+        const marker = L.circleMarker(ll, {
+          radius: 7,
+          color: day.color,
+          weight: 2,
+          fillColor: '#ffffff',
+          fillOpacity: 0.9
+        }).bindPopup(`<b>${p.name}</b><br>${p.addr || ''}`);
+        layers.push(marker);
+      });
+      if (latlngs.length > 1) {
+        const line = L.polyline(latlngs, { color: day.color, weight: 4, opacity: .9 });
+        layers.push(line);
+      }
+      currentLayerGroup = L.layerGroup(layers).addTo(map);
+      if (latlngs.length) {
+        const bounds = L.latLngBounds(latlngs);
+        map.fitBounds(bounds.pad(0.2));
+      }
+    }
+
+    // 生成顶部 Tabs
+    const tabs = document.getElementById('dayTabs');
+    DAYS.forEach(d => {
+      const el = document.createElement('div');
+      el.className = 'tab';
+      el.dataset.id = d.id;
+      el.textContent = d.name;
+      el.onclick = () => renderDay(d);
+      tabs.appendChild(el);
+    });
+
+    // 天气提示简写
+    const wbox = document.getElementById('weatherInline');
+    wbox.textContent = weatherForecast.map(w => `${w.date}${w.day} ${w.dayweather} ${w.temp}`).join(' ｜ ');
+
+    // 默认渲染 D1
+    renderDay(DAYS[0]);
+  </script>
+</body>
+</html>
+
+
